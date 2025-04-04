@@ -1,0 +1,10 @@
+[package]
+name = "rerun-loader-e57"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.97"
+argh = "0.1.13"
+e57 = "0.11.10"
+rerun = "0.22.1"
