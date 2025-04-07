@@ -1,6 +1,10 @@
+use core::time;
+use std::collections::HashSet;
+use std::env;
+
 use anyhow::{Context, Result};
 use e57::{CartesianCoordinate, E57Reader};
-use rerun::{EXTERNAL_DATA_LOADER_INCOMPATIBLE_EXIT_CODE};
+use rerun::{RecordingStream, EXTERNAL_DATA_LOADER_INCOMPATIBLE_EXIT_CODE};
 use rerun::{RecordingStreamBuilder, Vec3D};
 /// Command line arguments for the E57 Rerun data loader.
 #[derive(argh::FromArgs, Debug)]
@@ -52,6 +56,21 @@ fn extension(path: &std::path::Path) -> String {
         .to_string()
 }
 
+fn get_allowed_scans() -> Option<HashSet<usize>> {
+    let allowed_scans: Option<HashSet<usize>> = match env::var("RERUN_E57_DISPLAY_SCANS") {
+        Ok(val) => {
+            let set = val
+                .split(',')
+                .filter_map(|s| s.trim().parse::<usize>().ok())
+                .collect::<HashSet<_>>();
+            Some(set)
+        }
+        Err(_) => None,
+    };
+    
+    allowed_scans
+}
+
 fn main() -> Result<()> {
     let args: Args = argh::from_env();
 
@@ -87,7 +106,11 @@ fn main() -> Result<()> {
         rec.stdout()?
     };
 
-    rec.set_timepoint(timepoint_from_args(&args)?);
+    if let Some(timepoint) = timepoint_from_args(&args) {
+        rec.set_timepoint(timepoint);
+    }
+
+    let allowed_scans = get_allowed_scans();
 
     let entity_path_prefix = args
         .entity_path_prefix
@@ -104,6 +127,12 @@ fn main() -> Result<()> {
         if pointcloud.records < 1 {
             println!("Point cloud #{index} is empty, skipping...");
             continue;
+        }
+
+        if let Some(allowed_scans) = &allowed_scans {
+            if !allowed_scans.contains(&index) {
+                continue;
+            }
         }
 
         let iter = reader
@@ -171,6 +200,7 @@ fn main() -> Result<()> {
                     &rerun::Points3D::new(std::mem::take(&mut buffer))
                         .with_colors(color_buffer.clone()),
                 )?;
+
                 buffer.clear();
                 color_buffer.clear();
                 chunk_idx += 1;
@@ -188,26 +218,50 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn timepoint_from_args(args: &Args) -> anyhow::Result<rerun::TimePoint> {
+fn timepoint_from_args(args: &Args) -> Option<rerun::TimePoint> {
+    if args.time.is_empty() && args.sequence.is_empty() {
+        return None;
+    }
+
     let mut timepoint = rerun::TimePoint::default();
 
     for time_str in &args.time {
         if let Some((timeline_name, time)) = time_str.split_once('=') {
+
+            let parsed_time = match time.parse::<i64>() {
+                Ok(parsed_time) => parsed_time,
+                Err(_) => {
+                    eprintln!("Invalid time value: {time}");
+                    return None
+                }
+            };
+
             timepoint.insert(
                 rerun::Timeline::new_temporal(timeline_name),
-                time.parse::<i64>()?,
+                parsed_time,
             );
         }
     }
 
     for seq_str in &args.sequence {
+
+        
         if let Some((seqline_name, seq)) = seq_str.split_once('=') {
+
+            let parsed_time = match seq.parse::<i64>() {
+                Ok(parsed_time) => parsed_time,
+                Err(_) => {
+                    eprintln!("Invalid time value: {seq}");
+                    return None
+                }
+            };
+            
             timepoint.insert(
                 rerun::Timeline::new_sequence(seqline_name),
-                seq.parse::<i64>()?,
+                parsed_time,
             );
         }
     }
 
-    Ok(timepoint)
+    Some(timepoint)
 }
