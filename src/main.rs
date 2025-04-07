@@ -1,9 +1,6 @@
-use std::usize::MAX;
-
 use anyhow::{Context, Result};
 use e57::{CartesianCoordinate, E57Reader};
-use rerun::components::RotationQuat;
-use rerun::{Quaternion, EXTERNAL_DATA_LOADER_INCOMPATIBLE_EXIT_CODE};
+use rerun::{EXTERNAL_DATA_LOADER_INCOMPATIBLE_EXIT_CODE};
 use rerun::{RecordingStreamBuilder, Vec3D};
 /// Command line arguments for the E57 Rerun data loader.
 #[derive(argh::FromArgs, Debug)]
@@ -15,8 +12,14 @@ struct Args {
     #[argh(option, description = "optional recommended ID for the application")]
     application_id: Option<String>,
 
+    #[argh(option, description = "optional recommended ID for the application for existing applications")]
+    opened_application_id: Option<String>,
+
     #[argh(option, description = "optional recommended ID for the recording")]
     recording_id: Option<String>,
+
+    #[argh(option, description = "optional recommended ID for the recording for existing applications")]
+    opened_recording_id: Option<String>,
 
     #[argh(option, description = "optional prefix for all entity paths")]
     entity_path_prefix: Option<String>,
@@ -64,12 +67,21 @@ fn main() -> Result<()> {
         .with_context(|| format!("Failed to read E57 file: {:?}", args.filepath))?;
 
     let rec = {
+        
+        let app_id = args
+            .opened_application_id
+            .as_deref()
+            .unwrap_or(args.application_id.as_deref().unwrap_or("rerun_e57_loader"));
+
         let mut rec = RecordingStreamBuilder::new(
-            args.application_id.as_deref().unwrap_or("rerun_e57_loader"),
+            app_id,
         );
 
         if let Some(recording_id) = &args.recording_id {
             rec = rec.recording_id(recording_id);
+        } else if let Some(opened_recording_id) = &args.opened_recording_id {
+            rec = rec.recording_id(opened_recording_id);
+            
         }
 
         rec.stdout()?
@@ -153,6 +165,7 @@ fn main() -> Result<()> {
             }
 
             if buffer.len() >= chunk_size {
+                rec.set_time_seconds("default", 0);
                 rec.log(
                     format!("{entity_path_prefix}/scan_{index}/chunk_{chunk_idx}"),
                     &rerun::Points3D::new(std::mem::take(&mut buffer))
