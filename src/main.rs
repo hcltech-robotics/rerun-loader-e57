@@ -32,18 +32,21 @@ struct Args {
         switch,
         description = "optionally mark data to be logged statically"
     )]
+    #[allow(dead_code)]
     static_: bool,
 
     #[argh(
         option,
         description = "optional timestamps to log at (e.g. --time sim_time=1709203426)"
     )]
+    #[allow(dead_code)]
     time: Vec<String>,
 
     #[argh(
         option,
         description = "optional sequences to log at (e.g. --sequence sim_frame=42)"
     )]
+    #[allow(dead_code)]
     sequence: Vec<String>,
 }
 
@@ -180,7 +183,7 @@ fn main() -> Result<()> {
                 format!("{entity_path_prefix}/scan_{index}/point"),
                 &Points3D::new(translation)
                     .with_colors([rerun::Color::from_rgb(255, 0, 0)])
-                    .with_radii([0.15 as f32])
+                    .with_radii([0.15_f32])
                     .with_labels([format!("Scan {index}")])
             )?;
         }
@@ -194,20 +197,17 @@ fn main() -> Result<()> {
                 }
             };
 
-            match p.cartesian {
-                CartesianCoordinate::Valid { x, y, z } => {
-                    buffer.push(Vec3D::new(x as f32, y as f32, z as f32));
-                    let color = match p.color {
-                        Some(color) => rerun::Color::from_rgb(
-                            (color.red * 255.0) as u8,
-                            (color.green * 255.0) as u8,
-                            (color.blue * 255.0) as u8,
-                        ),
-                        _ => rerun::Color::from_rgb(255, 255, 255),
-                    };
-                    color_buffer.push(color)
-                }
-                _ => {}
+            if let CartesianCoordinate::Valid { x, y, z } = p.cartesian {
+                buffer.push(Vec3D::new(x as f32, y as f32, z as f32));
+                let color = match p.color {
+                    Some(color) => rerun::Color::from_rgb(
+                        (color.red * 255.0) as u8,
+                        (color.green * 255.0) as u8,
+                        (color.blue * 255.0) as u8,
+                    ),
+                    _ => rerun::Color::from_rgb(255, 255, 255),
+                };
+                color_buffer.push(color)
             }
 
             if buffer.len() >= chunk_size {
